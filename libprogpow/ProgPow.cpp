@@ -125,16 +125,17 @@ std::string ProgPow::getKern(uint64_t block_number, kernel_t kern)
 	// Hard code mix[0] to guarantee the address for the global load depends on the result of the load
 	ret << "// global load\n";
 	if (kern == KERNEL_CUDA)
-		ret << "offset = __shfl_sync(0xFFFFFFFF, mix[0], loop%PROGPOW_LANES, PROGPOW_LANES);\n";
+		ret << "offset = __shfl_sync(0xFFFFFFFF, mix[0], (loop >> 2) % PROGPOW_LANES, PROGPOW_LANES);\n";
 	else
 	{
-		ret << "if(lane_id == (loop % PROGPOW_LANES))\n";
+		ret << "if(lane_id == ((loop >> 2) % PROGPOW_LANES))\n";
 		ret << "    share[group_id] = mix[0];\n";
 		ret << "barrier(CLK_LOCAL_MEM_FENCE);\n";
 		ret << "offset = share[group_id];\n";
 	}
+	ret << "uint32_t orig_offset = offset;\n";
 	ret << "offset %= PROGPOW_DAG_ELEMENTS;\n";
-	ret << "offset = offset * PROGPOW_LANES + (lane_id ^ loop) % PROGPOW_LANES;\n";
+	ret << "offset = offset * PROGPOW_LANES + (lane_id ^ (loop >> 2)) % PROGPOW_LANES;\n";
     ret << "data_dag = g_dag[offset];\n";
     ret << "// hack to prevent compiler from reordering LD and usage\n";
     if (kern == KERNEL_CUDA)
@@ -181,7 +182,13 @@ std::string ProgPow::getKern(uint64_t block_number, kernel_t kern)
         ret << "if (hack_false) __threadfence_block();\n";
     else
         ret << "if (hack_false) barrier(CLK_LOCAL_MEM_FENCE);\n";
+    ret << "if ((loop & 3) == 3) {\n";
     ret << merge("mix[0]", "data_dag.s[0]", rnd());
+    ret << "} else {\n";
+    ret << merge("mix[1]", "data_dag.s[0]", rnd());
+    ret << "mix[1] += mix[0];\n";
+    ret << "mix[0] = orig_offset + 1;\n";
+    ret << "}\n";
     for (int i = 1; i < PROGPOW_DAG_LOADS; i++)
     {
         std::string dest = mix_dst();

@@ -1,12 +1,6 @@
-# ProgPoW - A Programmatic Proof of Work
+# ProgPoW - A Programmatic Proof of Work - unofficial fork, 3x faster on NVIDIA Maxwell
 
-[![Join the chat at https://gitter.im/ifdefelse/community](https://badges.gitter.im/ifdefelse/community.svg)](https://gitter.im/ifdefelse/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)[![Follow us](https://img.shields.io/twitter/follow/IfDefElse_.svg)](https://twitter.com/IfDefElse_)
-
-ProgPoW is a proof-of-work algorithm designed to close the efficiency gap available to specialized ASICs. It utilizes almost all parts of commodity hardware (GPUs), and comes pre-tuned for the most common hardware utilized in the Ethereum network.
-
-Ever since the first bitcoin mining ASIC was released, many new Proof of Work algorithms have been created with the intention of being “ASIC-resistant”. The goal of “ASIC-resistance” is to resist the centralization of PoW mining power such that these coins couldn’t be so easily manipulated by a few players. 
-
-This document presents an overview of the algorithm and examines what it means to be “ASIC-resistant.” Next, we compare existing PoW designs by analyzing how each algorithm executes in hardware. Finally, we present the detailed implementation by walking through the code.
+ProgPoW is a proof-of-work algorithm designed to close the efficiency gap available to specialized ASICs.
 
 ## Build and Test Instructions
 
@@ -38,16 +32,14 @@ The main elements of the algorithm are:
 * Increases mix state.
 * Adds a random sequence of math in the main loop.
 * Adds reads from a small, low-latency cache that supports random addresses.
-* Increases the DRAM read from 128 bytes to 256 bytes.
+* Increases the DRAM read from 128 bytes to 2048 bytes (random reads of groups of 4 sequential blocks of 512 bytes).
 
-The random sequence changes every `PROGPOW_PERIOD` (50 blocks or about 12.5 minutes).  When mining source code is generated for the random sequence and compiled on the host CPU.  The GPU will execute the compiled code where what math to perform and what mix state to use are already resolved.
+The random sequence changes every `PROGPOW_PERIOD` (10 blocks, or about 2.5 minutes for Ethereum).  When mining source code is generated for the random sequence and compiled on the host CPU.  The GPU will execute the compiled code where what math to perform and what mix state to use are already resolved.
 
-While a custom ASIC to implement this algorithm is still possible, the efficiency gains available are minimal.  The majority of a commodity GPU is required to support the above elements. The only optimizations available are:
+While a custom ASIC to implement this algorithm is still possible, the efficiency gains available are smaller than for Ethash.  Much of a commodity GPU is required to support the above elements.  Some available ASIC optimizations are:
 * Remove the graphics pipeline (displays, geometry engines, texturing, etc)
 * Remove floating point math
 * A few ISA tweaks, like instructions that exactly match the merge() function
-
-These would result in minimal, roughly 1.1-1.2x, efficiency gains.  This is much less than the 2x for Ethash or 50x for Cryptonight.
 
 ## Rationale for PoW on Commodity Hardware
 With the growth of large mining pools, the control of hashing power has been delegated to the top few pools to provide a steadier economic return for small miners. While some have made the argument that large centralized pools defeats the purpose of “ASIC resistance,” it’s important to note that ASIC based coins are even more centralized for several reasons.
@@ -61,53 +53,6 @@ With the growth of large mining pools, the control of hashing power has been del
 While the goal of “ASIC resistance” is valuable, the entire concept of “ASIC resistance” is a bit of a fallacy.  CPUs and GPUs are themselves ASICs.  Any algorithm that can run on a commodity ASIC (a CPU or GPU) by definition can have a customized ASIC created for it with slightly less functionality. Some algorithms are intentionally made to be  “ASIC friendly” - where an ASIC implementation is drastically more efficient than the same algorithm running on general purpose hardware. The protection that this offers when the coin is unknown also makes it an attractive target for a dedicate mining ASIC company as soon as it becomes useful.
 
 Therefore, ASIC resistance is: the efficiency difference of specialized hardware versus hardware that has a wider adoption and applicability.  A smaller efficiency difference between custom vs general hardware mean higher resistance and a better algorithm. This efficiency difference is the proper metric to use when comparing the quality of PoW algorithms.  Efficiency could mean absolute performance, performance per watt, or performance per dollar - they are all highly correlated.  If a single entity creates and controls an ASIC that is drastically more efficient, they can gain 51% of the network hashrate and possibly stage an attack.
-
-## Review of Existing PoW Algorithms
-
-### SHA256
-* Potential ASIC efficiency gain ~ 1000X
-
-The SHA algorithm is a sequence of simple math operations - additions, logical ops, and rotates.
-
-To process a single op on a CPU or GPU requires fetching and decoding an instruction, reading data from a register file, executing the instruction, and then writing the result back to a register file.  This takes significant time and power.
-
-A single op implemented in an ASIC takes a handful of transistors and wires.  This means every individual op takes negligible power, area, or time.  A hashing core is built by laying out the sequence of required ops.
-
-The hashing core can execute the required sequence of ops in much less time, and using less power or area, than doing the same sequence on a CPU or GPU.  A bitcoin ASIC consists of a number of identical hashing cores and some minimal off-chip communication.
-
-### Scrypt and NeoScrypt
-* Potential ASIC efficiency gain ~ 1000X
-
-Scrypt and NeoScrypt are similar to SHA in the arithmetic and bitwise operations used. Unfortunately, popular coins such as Litecoin only use a scratchpad size between 32kb and 128kb for their PoW mining algorithm. This scratch pad is small enough to trivially fit on an ASIC next to the math core. The implementation of the math core would be very similar to SHA, with similar efficiency gains.
-
-### X11 and X16R
-* Potential ASIC efficiency gain ~ 1000X
-
-X11 (and similar X##) require an ASIC that has 11 unique hashing cores pipelined in a fixed sequence.  Each individual hashing core would have similar efficiency to an individual SHA core, so the overall design will have the same efficiency gains.
-
-X16R requires the multiple hashing cores to interact through a simple sequencing state machine. Each individual core will have similar efficiency gains and the sequencing logic will take minimal power, area, or time.
-
-The Baikal BK-X is an existing ASIC with multiple hashing cores and a programmable sequencer.  It has been upgraded to enable new algorithms that sequence the hashes in different orders.
-
-### Equihash
-* Potential ASIC efficiency gain ~ 100X
-
-The ~150mb of state is large but possible on an ASIC. The binning, sorting, and comparing of bit strings could be implemented on an ASIC at extremely high speed.
-
-### Cuckoo Cycle
-* Potential ASIC efficiency gain ~ 100X
-
-The amount of state required on-chip is not clear as there are Time/Memory Tradeoff attacks. A specialized graph traversal core would have similar efficiency gains to a SHA compute core.
-
-### CryptoNight
-* Potential ASIC efficiency gain ~ 50X
-
-Compared to Scrypt, CryptoNight does much less compute and requires a full 2mb of scratch pad (there is no known Time/Memory Tradeoff attack).  The large scratch pad will dominate the ASIC implementation and limit the number of hashing cores, limiting the absolute performance of the ASIC.  An ASIC will consist almost entirely of just on-die SRAM.
-
-### Ethash
-* Potential ASIC efficiency gain ~ 2X
-
-Ethash requires external memory due to the large size of the DAG.  However that is all that it requires - there is minimal compute that is done on the result loaded from memory.  As a result a custom ASIC could remove most of the complexity, and power, of a GPU and be just a memory interface connected to a small compute engine.
 
 ## ProgPoW Algorithm Walkthrough
 
@@ -126,19 +71,20 @@ ProgPoW can be tuned using the following parameters.  The proposed settings have
 
 The value of these parameters has been tweaked between version 0.9.2 (live on the Gangnam testnet) and 0.9.3 (proposed for Ethereum adoption).  See [this medium post](https://medium.com/@ifdefelse/progpow-progress-da5bb31a651b) for details.
 
-| Parameter             | 0.9.2 | 0.9.3 |
-|-----------------------|-------|-------|
-| `PROGPOW_PERIOD`      | `50`  | `10`  |
-| `PROGPOW_LANES`       | `16`  | `16`  |
-| `PROGPOW_REGS`        | `32`  | `32`  |
-| `PROGPOW_DAG_LOADS`   | `4`   | `4`   |
-| `PROGPOW_CACHE_BYTES` | `16x1024` | `16x1024` |
-| `PROGPOW_CNT_DAG`     | `64`  | `64`  |
-| `PROGPOW_CNT_CACHE`   | `12`  | `11`  |
-| `PROGPOW_CNT_MATH`    | `20`  | `18`  |
+| Parameter             | 0.9.2 | 0.9.3 | 0.9.3m1 |
+|-----------------------|-------|-------|---------|
+| `PROGPOW_PERIOD`      | `50`  | `10`  |  `10`   |
+| `PROGPOW_LANES`       | `16`  | `16`  |  `16`   |
+| `PROGPOW_REGS`        | `32`  | `32`  |  `64`   |
+| `PROGPOW_DAG_LOADS`   | `4`   | `4`   |  `8`    |
+| `PROGPOW_CACHE_BYTES` | `16x1024` | `16x1024` |  `16x1024`  |
+| `PROGPOW_CNT_DAG`     | `64`  | `64`  |  `32`   |
+| `PROGPOW_CNT_CACHE`   | `12`  | `11`  |  `22`   |
+| `PROGPOW_CNT_MATH`    | `20`  | `18`  |  `36`   |
 
+Besides the parameter changes above, this unofficial ProgPoW 0.9.3m1 further differs from 0.9.3 in that it makes every four adjacent `PROGPOW_DAG_LOADS` sequential, only proceeding to a new random offset afterwards, effectively increasing the random DAG read block size by a further factor of 4, for a total of 8 (from 256 bytes in 0.9.3 to 2048 bytes in 0.9.3m1).
 
-The random program changes every `PROGPOW_PERIOD` blocks (default `50`, roughly 12.5 minutes) to ensure the hardware executing the algorithm is fully programmable.  If the program only changed every DAG epoch (roughly 5 days) certain miners could have time to develop hand-optimized versions of the random sequence, giving them an undue advantage.
+The random program changes every `PROGPOW_PERIOD` blocks to ensure the hardware executing the algorithm is fully programmable.  If the program only changed every DAG epoch (roughly 5 days for Ethereum) certain miners could have time to develop hand-optimized versions of the random sequence, giving them an undue advantage.
 
 Sample code is written in C++, this should be kept in mind when evaluating the code in the specification.
 
@@ -326,17 +272,18 @@ uint32_t math(uint32_t a, uint32_t b, uint32_t r)
 
 
 The flow of the inner loop is:
-* Lane `(loop % LANES)` is chosen as the leader for that loop iteration
-* The leader's `mix[0]` value modulo the number of 256-byte DAG entries is is used to select where to read from the full DAG
-* Each lane reads `DAG_LOADS` sequential words, using `(lane ^ loop) % LANES` as the starting offset within the entry.
+* Lane `((loop >> 2) % LANES)` is chosen as the leader for that loop iteration
+* The leader's `mix[0]` value modulo the number of 512-byte DAG entries is used to select where to read from the full DAG
+* Each lane reads `DAG_LOADS` sequential words, using `(lane ^ (loop >> 2)) % LANES` as the starting offset within the entry
 * The random sequence of math and cache accesses is performed
 * The DAG data read at the start of the loop is merged at the end of the loop
+* Except on every fourth iteration of the loop (when `mix[0]` is a result of the random math, just like other `mix` registers are), `mix[0]` is advanced such that the next sequential 512-byte DAG entry would be read
 
 `prog_seed` and `loop` come from the outer loop, corresponding to the current program seed (which is block_number/PROGPOW_PERIOD) and the loop iteration number.  `mix` is the state array, initially filled by `fill_mix`. `dag` is the bytes of the Ethash DAG grouped into 32 bit unsigned ints in litte-endian format.  On little-endian architectures this is just a normal int32 pointer to the existing DAG.
 
 `DAG_BYTES` is set to the number of bytes in the current DAG, which is generated identically to the existing Ethash algorithm.  
 
-Test vectors can be found [in the test vectors file](test-vectors.md#progPowLoop).
+Test vectors for 0.9.2 can be found [in the test vectors file](test-vectors.md#progPowLoop).
 
 ```cpp
 void progPowLoop(
@@ -345,19 +292,20 @@ void progPowLoop(
     uint32_t mix[PROGPOW_LANES][PROGPOW_REGS],
     const uint32_t *dag)
 {
-    // dag_entry holds the 256 bytes of data loaded from the DAG
+    // dag_entry holds the 512 bytes of data loaded from the DAG
     uint32_t dag_entry[PROGPOW_LANES][PROGPOW_DAG_LOADS];
-    // On each loop iteration rotate which lane is the source of the DAG address.
+    // On every fourth loop iteration rotate which lane is the source of the DAG address.
     // The source lane's mix[0] value is used to ensure the last loop's DAG data feeds into this loop's address.
-    // dag_addr_base is which 256-byte entry within the DAG will be accessed
-    uint32_t dag_addr_base = mix[loop%PROGPOW_LANES][0] %
+    // dag_addr_base is which 512-byte entry within the DAG will be accessed
+    uint32_t orig_mix0 = mix[(loop >> 2) % PROGPOW_LANES][0];
+    uint32_t dag_addr_base = orig_mix0 %
         (DAG_BYTES / (PROGPOW_LANES*PROGPOW_DAG_LOADS*sizeof(uint32_t)));
     for (int l = 0; l < PROGPOW_LANES; l++)
     {
         // Lanes access DAG_LOADS sequential words from the dag entry
         // Shuffle which portion of the entry each lane accesses each iteration by XORing lane and loop.
         // This prevents multi-chip ASICs from each storing just a portion of the DAG
-        size_t dag_addr_lane = dag_addr_base * PROGPOW_LANES + (l ^ loop) % PROGPOW_LANES;
+        size_t dag_addr_lane = dag_addr_base * PROGPOW_LANES + (l ^ (loop >> 2)) % PROGPOW_LANES;
         for (int i = 0; i < PROGPOW_DAG_LOADS; i++)
             dag_entry[l][i] = dag[dag_addr_lane * PROGPOW_DAG_LOADS + i];
     }
@@ -410,8 +358,18 @@ void progPowLoop(
     {
         int dst = (i==0) ? 0 : mix_seq_dst[(mix_seq_dst_cnt++)%PROGPOW_REGS];
         int sel = kiss99(prog_rnd);
+        if (i == 0 && (loop & 3) != 3)
+            dst = 1;
         for (int l = 0; l < PROGPOW_LANES; l++)
+        {
             mix[l][dst] = merge(mix[l][dst], dag_entry[l][i], sel);
+            if (i == 0 && (loop & 3) != 3)
+            {
+                mix[l][1] += mix[l][0];
+                // To maintain sequential reads, it'd be sufficient to do this for the leader lane, but we do it for all
+                mix[l][0] = orig_mix0 + 1;
+            }
+        }
     }
 }
 ```
@@ -493,6 +451,7 @@ Additional test vectors can be found [in the test vectors file](test-vectors.md#
 
 ## Change History
 
+- 0.9.3m1 (proposed here) - Double REGS, DAG_LOADS, CNT_MATH, and CNT_CACHE, halve CNT_DAG.  Make every four adjacent DAG_LOADS sequential, only proceeding to a new random offset afterwards, effectively increasing the random DAG read block size by a further factor of 4, for a total of 8 (from 256 bytes in 0.9.3 to 2048 bytes in 0.9.3m1).  See [this GitHub issue comments thread](https://github.com/ifdefelse/ProgPOW/issues/26#issuecomment-480382319) for details.  While at it, drop the overly optimistic ASIC resistance claims from this README.md.
 - 0.9.3 (proposed) - Reduce parameters PERIOD, CNT_MATH, and CNT_CACHE. See [this medium post](https://medium.com/@ifdefelse/progpow-progress-da5bb31a651b) for details.
 - [0.9.2](https://github.com/ifdefelse/ProgPOW/blob/0e39b62deb0c9ab14900fc404fcb19cac70240e1/README.md) - Unique sources for math() and prevent rotation by 0 in merge().  Suggested by [SChernykh](https://github.com/ifdefelse/ProgPOW/issues/19)
 - [0.9.1](https://github.com/ifdefelse/ProgPOW/blob/60bba1c3fdad6a54539fc3e9f05727547de9c58c/README.md) - Shuffle what part of the DAG entry each lane accesses. Suggested by [mbevand](https://github.com/ifdefelse/ProgPOW/pull/13)

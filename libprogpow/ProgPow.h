@@ -4,21 +4,21 @@
 #include <string>
 
 // blocks before changing the random program
-#define PROGPOW_PERIOD          50
+#define PROGPOW_PERIOD          10
 // lanes that work together calculating a hash
 #define PROGPOW_LANES           16
 // uint32 registers per lane
-#define PROGPOW_REGS            32
+#define PROGPOW_REGS            64
 // uint32 loads from the DAG per lane
-#define PROGPOW_DAG_LOADS       4
+#define PROGPOW_DAG_LOADS       8
 // size of the cached portion of the DAG
 #define PROGPOW_CACHE_BYTES     (16*1024)
 // DAG accesses, also the number of loops executed
-#define PROGPOW_CNT_DAG         64
+#define PROGPOW_CNT_DAG         32
 // random cache accesses per loop
-#define PROGPOW_CNT_CACHE       12
+#define PROGPOW_CNT_CACHE       22
 // random math instructions per loop
-#define PROGPOW_CNT_MATH        20
+#define PROGPOW_CNT_MATH        36
 
 class ProgPow
 {
