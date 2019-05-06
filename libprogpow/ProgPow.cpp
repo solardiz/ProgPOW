@@ -113,9 +113,13 @@ std::string ProgPow::getKern(uint64_t block_number, kernel_t kern)
 	ret << "uint32_t offset, data;\n";
 
 	if (kern == KERNEL_CUDA)
+	{
+		ret << "const unsigned char *c_dag_uc = (const unsigned char *)c_dag;\n";
 		ret << "const uint32_t lane_id = threadIdx.x & (PROGPOW_LANES-1);\n";
+	}
 	else
 	{
+		ret << "__local const unsigned char *c_dag_uc = (__local const unsigned char *)c_dag;\n";
 		ret << "const uint32_t lane_id = get_local_id(0) & (PROGPOW_LANES-1);\n";
 		ret << "const uint32_t group_id = get_local_id(0) / PROGPOW_LANES;\n";
 	}
@@ -153,8 +157,15 @@ std::string ProgPow::getKern(uint64_t block_number, kernel_t kern)
 			std::string dest = mix_dst();
 			uint32_t    r = rnd();
 			ret << "// cache load " << i << "\n";
-			ret << "offset = " << src << " % PROGPOW_CACHE_WORDS;\n";
-			ret << "data = c_dag[offset];\n";
+			ret << "offset = " << src << " & ((PROGPOW_CACHE_WORDS - 1) << 2);\n";
+			if (kern == KERNEL_CUDA)
+			{
+				ret << "data = *(const uint32_t *)&c_dag_uc[offset];\n";
+			}
+			else
+			{
+				ret << "data = *(__local const uint32_t *)&c_dag_uc[offset];\n";
+			}
 			ret << merge(dest, "data", r);
 		}
 		if (i < PROGPOW_CNT_MATH)

@@ -330,8 +330,8 @@ void progPowLoop(
             int sel = kiss99(prog_rnd);
             for (int l = 0; l < PROGPOW_LANES; l++)
             {
-                uint32_t offset = mix[l][src] % (PROGPOW_CACHE_BYTES/sizeof(uint32_t));
-                mix[l][dst] = merge(mix[l][dst], dag[offset], sel);
+                uint32_t offset = mix[l][src] % ((PROGPOW_CACHE_BYTES/sizeof(uint32_t) << 2));
+                mix[l][dst] = merge(mix[l][dst], dag[offset >> 2], sel);
             }
         }
         if (i < PROGPOW_CNT_MATH)
@@ -451,6 +451,7 @@ Additional test vectors can be found [in the test vectors file](test-vectors.md#
 
 ## Change History
 
+- 0.9.3m2 (proposed here) - Index cache with byte offsets.  See [this GitHub issue](https://github.com/ifdefelse/ProgPOW/issues/40) for details.
 - 0.9.3m1 (proposed here) - Double REGS, DAG_LOADS, CNT_MATH, and CNT_CACHE, halve CNT_DAG.  Make every four adjacent DAG_LOADS sequential, only proceeding to a new random offset afterwards, effectively increasing the random DAG read block size by a further factor of 4, for a total of 8 (from 256 bytes in 0.9.3 to 2048 bytes in 0.9.3m1).  See [this GitHub issue comments thread](https://github.com/ifdefelse/ProgPOW/issues/26#issuecomment-480382319) for details.  While at it, drop the overly optimistic ASIC resistance claims from this README.md.
 - 0.9.3 (proposed) - Reduce parameters PERIOD, CNT_MATH, and CNT_CACHE. See [this medium post](https://medium.com/@ifdefelse/progpow-progress-da5bb31a651b) for details.
 - [0.9.2](https://github.com/ifdefelse/ProgPOW/blob/0e39b62deb0c9ab14900fc404fcb19cac70240e1/README.md) - Unique sources for math() and prevent rotation by 0 in merge().  Suggested by [SChernykh](https://github.com/ifdefelse/ProgPOW/issues/19)
